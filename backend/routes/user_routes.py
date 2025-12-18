@@ -2,6 +2,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from ..db import get_db
+from ..routes.auth_routes import get_current_user
+from fastapi import Depends
 
 router = APIRouter()
 
@@ -11,9 +13,11 @@ class UserCreate(BaseModel):
     email: EmailStr
 
 
+# ✅ FIX: password added here
 class User(BaseModel):
     name: str
     email: EmailStr
+    password: str
 
 
 class UserUpdate(BaseModel):
@@ -22,7 +26,7 @@ class UserUpdate(BaseModel):
 
 
 @router.get("/users")
-def get_users():
+def get_users(current_user=Depends(get_current_user)):
     conn = get_db()
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM mock_data")
@@ -34,36 +38,34 @@ def get_users():
 
 @router.post("/users", status_code=201)
 def create_user(user: User):
-    if not user.name or not user.email:
-        raise HTTPException(status_code=400, detail="Name and email required")
+    if not user.name or not user.email or not user.password:
+        raise HTTPException(status_code=400, detail="Name, email and password required")
 
     conn = None
     cur = None
     try:
         conn = get_db()
         cur = conn.cursor()
-        sql = "INSERT INTO mock_data (name, email) VALUES (%s, %s)"
-        cur.execute(sql, (user.name, user.email))
+
+        sql = """
+        INSERT INTO mock_data (name, email, password)
+        VALUES (%s, %s, %s)
+        """
+        cur.execute(sql, (user.name, user.email, user.password))
+
         conn.commit()
         user_id = cur.lastrowid
+
     except Exception as e:
-        if conn is not None:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
+        if conn:
+            conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
     finally:
-        if cur is not None:
-            try:
-                cur.close()
-            except Exception:
-                pass
-        if conn is not None:
-            try:
-                conn.close()
-            except Exception:
-                pass
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
     return {"message": "User added successfully", "id": user_id}
 

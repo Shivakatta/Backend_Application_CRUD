@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from ..db import get_db
 from fastapi.security import OAuth2PasswordBearer
 from fastapi import Security
+from fastapi.security import OAuth2PasswordRequestForm
 
 router = APIRouter()
 
@@ -55,7 +56,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 def get_user_by_id(user_id: int):
     conn = get_db()
     cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT id, name, email FROM users WHERE id=%s", (user_id,))
+    cur.execute("SELECT id, name, email FROM mock_data WHERE id=%s", (user_id,))
     row = cur.fetchone()
     cur.close()
     conn.close()
@@ -97,21 +98,24 @@ def register(user: RegisterModel):
 
 
 @router.post("/login", response_model=Token)
-def login(form_data: LoginModel):
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
     conn = get_db()
     cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT * FROM users WHERE email=%s", (form_data.email,))
+
+    # OAuth2 uses "username", we treat it as email
+    cur.execute("SELECT * FROM mock_data WHERE email=%s", (form_data.username,))
     row = cur.fetchone()
+
     cur.close()
     conn.close()
-    if not row:
-        raise HTTPException(status_code=400, detail="Incorrect email or password")
-    if not verify_password(form_data.password, row.get("password")):
+
+    if not row or not verify_password(form_data.password, row["password"]):
         raise HTTPException(status_code=400, detail="Incorrect email or password")
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": str(row.get("id")), "email": row.get("email")},
+        data={"sub": str(row["id"])},
         expires_delta=access_token_expires,
     )
+
     return {"access_token": access_token, "token_type": "bearer"}
