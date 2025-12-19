@@ -8,20 +8,24 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 router = APIRouter()
 
-# ✅ FIXED bcrypt configuration (stable)
+# -------------------------------
+# PASSWORD CONFIG
+# -------------------------------
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto"
 )
 
-# 🔐 JWT Config
-SECRET_KEY = "CHANGE_THIS_SECRET"
+# -------------------------------
+# JWT CONFIG
+# -------------------------------
+SECRET_KEY = "CHANGE_THIS_SECRET"   # later env var lo pettochu
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
-
-# ---------- MODELS ----------
-
+# -------------------------------
+# MODELS
+# -------------------------------
 class RegisterModel(BaseModel):
     name: str
     email: EmailStr
@@ -33,10 +37,10 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
-# ---------- PASSWORD UTILS ----------
-
+# -------------------------------
+# PASSWORD UTILS
+# -------------------------------
 def get_password_hash(password: str) -> str:
-    # bcrypt max safe limit handled internally
     return pwd_context.hash(password)
 
 
@@ -44,8 +48,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-# ---------- JWT UTILS ----------
-
+# -------------------------------
+# JWT UTILS
+# -------------------------------
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
@@ -53,11 +58,13 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
+# ✅ IMPORTANT FIX (no leading slash)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 
-# ---------- USER HELPERS ----------
-
+# -------------------------------
+# USER HELPERS
+# -------------------------------
 def get_user_by_id(user_id: int):
     conn = get_db()
     cur = conn.cursor(dictionary=True)
@@ -66,8 +73,8 @@ def get_user_by_id(user_id: int):
         "SELECT id, name, email FROM mock_data WHERE id=%s",
         (user_id,)
     )
-
     user = cur.fetchone()
+
     cur.close()
     conn.close()
     return user
@@ -79,10 +86,13 @@ def get_current_user(token: str = Security(oauth2_scheme)):
         user_id = payload.get("sub")
 
         if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
+            raise HTTPException(status_code=401, detail="Token missing subject")
 
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError as e:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Invalid token: {str(e)}"
+        )
 
     user = get_user_by_id(int(user_id))
     if not user:
@@ -91,14 +101,16 @@ def get_current_user(token: str = Security(oauth2_scheme)):
     return user
 
 
-# ---------- ROUTES ----------
+# -------------------------------
+# ROUTES
+# -------------------------------
 
+# 🔐 REGISTER
 @router.post("/register", status_code=201)
 def register(user: RegisterModel):
     conn = get_db()
     cur = conn.cursor()
 
-    # Check existing email
     cur.execute(
         "SELECT id FROM mock_data WHERE email=%s",
         (user.email,)
@@ -108,10 +120,8 @@ def register(user: RegisterModel):
         conn.close()
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Hash password
     hashed_password = get_password_hash(user.password)
 
-    # Insert user
     cur.execute(
         "INSERT INTO mock_data (name, email, password) VALUES (%s, %s, %s)",
         (user.name, user.email, hashed_password)
@@ -129,6 +139,7 @@ def register(user: RegisterModel):
     }
 
 
+# 🔐 LOGIN
 @router.post("/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
     conn = get_db()
@@ -157,4 +168,28 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
     return {
         "access_token": access_token,
         "token_type": "bearer"
+    }
+
+
+# -------------------------------
+# 📊 VIEW DB DATA (PROTECTED)
+# -------------------------------
+@router.get("/db-users")
+def get_all_db_users(current_user=Depends(get_current_user)):
+    """
+    Returns all users from DB (JWT Protected)
+    """
+    conn = get_db()
+    cur = conn.cursor(dictionary=True)
+
+    cur.execute("SELECT id, name, email FROM mock_data")
+    users = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return {
+        "logged_in_user": current_user,
+        "count": len(users),
+        "data": users
     }

@@ -1,29 +1,41 @@
-# Backend CRUD (FastAPI + MySQL)
+# Backend CRUD API (FastAPI + MySQL)
 
-Quick guide to run the small FastAPI CRUD app.
+This project is a simple **Backend CRUD application** built using **FastAPI** and **MySQL**.
+If you are coming from **Flask**, think of this as the FastAPI version of a REST API
+with **better validation, performance, and auto documentation**.
 
-Prerequisites
-- Python 3.8+
-- MySQL server running on localhost
-- Database user `root` with password `Shiva@366` (adjust in `db.py` if different)
+---
 
-Install
+## 📌 Tech Stack Used
 
-```bash
-python -m pip install -r requirements.txt
-```
+- **Python 3.8+**
+- **FastAPI** – API framework
+- **MySQL** – Database
+- **Uvicorn** – ASGI server
+- **Pydantic** – Data validation
+- **JWT (Bearer Token)** – Authentication (Login)
 
-Run
+---
 
-```bash
-uvicorn backend.main:app --reload
-```
+## 📌 Project Flow (High Level)
 
-API endpoints (default base '/')
-- `GET /users` — list users
-- `POST /users` — create user (JSON body: `{"name":"...","email":"..."}`)
-- `PUT /users/{id}` — full update (same JSON as POST)
-- `PATCH /users/{id}` — partial update (any of `name` or `email`)
-- `DELETE /users/{id}` — delete user
+1. User **registers**
+2. User **logs in**
+3. Backend generates a **JWT access token**
+4. Token is used to access **protected APIs** like `/users`
 
-If your DB credentials or host differ, edit `db.py`.
+👉 Same concept as Flask, but FastAPI handles many things automatically.
+
+---
+
+## 📌 Prerequisites
+
+Make sure you have the following before running the project:
+
+- Python **3.8 or above**
+- MySQL server running on **localhost**
+- MySQL user:
+  - **username:** `root`
+  - **password:** `Shiva@366`
+
+⚠️ If your MySQL credentials are different, update them inside:
